@@ -12,13 +12,27 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 
 // Middleware
 const corsOptions = {
-  origin: ['https://coefficient.fun', 'http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, curl)
+    if (!origin) return callback(null, true);
+    
+    // Allow coefficient.fun and all its subdomains
+    if (origin.includes('coefficient.fun') || 
+        origin.includes('localhost') || 
+        origin.includes('127.0.0.1')) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all for now - can restrict later
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length', 'X-Request-Id']
 };
 
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Handle preflight for all routes
 app.use(express.json({ limit: '50mb' })); // Increase limit for bulk imports
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
