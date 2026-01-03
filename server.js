@@ -1010,6 +1010,89 @@ app.get('/api/reports/overview', authenticateToken, async (req, res) => {
   }
 });
 
+// Get time entries for a specific user
+app.get('/api/time-entries/user/:userId', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Users can only see their own entries, unless admin
+    if (req.user.role !== 'admin' && req.user.id !== parseInt(userId)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    const [entries] = await pool.query(`
+      SELECT 
+        te.*,
+        p.name as project_name,
+        p.color as project_color
+      FROM time_entries te
+      LEFT JOIN projects p ON te.project_id = p.id
+      WHERE te.user_id = ?
+      ORDER BY te.entry_date DESC, te.created_at DESC
+      LIMIT 200
+    `, [userId]);
+    
+    res.json(entries.map(e => ({
+      ...e,
+      hours: parseFloat(e.hours)
+    })));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create time entry
+app.post('/api/time-entries', authenticateToken, async (req, res) => {
+  try {
+    const { user_id, project_id, entry_date, hours, description, billable, source } = req.body;
+    
+    // Users can only create entries for themselves, unless admin
+    if (req.user.role !== 'admin' && req.user.id !== parseInt(user_id)) {
+      return res.status(403).json({ error: 'Can only create entries for yourself' });
+    }
+    
+    // Get user's hourly rate
+    const [users] = await pool.query('SELECT hourly_rate FROM users WHERE id = ?', [user_id]);
+    const hourlyRate = users[0] ? users[0].hourly_rate : 0;
+    
+    const [result] = await pool.query(
+      `INSERT INTO time_entries 
+       (user_id, project_id, entry_date, hours, description, billable, hourly_rate, source, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [user_id, project_id, entry_date, hours, description || '', billable !== false, hourlyRate, source || 'manual']
+    );
+    
+    res.json({ success: true, id: result.insertId });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete time entry
+app.delete('/api/time-entries/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check ownership
+    const [entries] = await pool.query('SELECT user_id FROM time_entries WHERE id = ?', [id]);
+    
+    if (entries.length === 0) {
+      return res.status(404).json({ error: 'Entry not found' });
+    }
+    
+    // Users can only delete their own entries, unless admin
+    if (req.user.role !== 'admin' && req.user.id !== entries[0].user_id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    await pool.query('DELETE FROM time_entries WHERE id = ?', [id]);
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Start Server
 app.listen(PORT, () => {
   console.log(`✓ Server running on http://localhost:${PORT}`);
