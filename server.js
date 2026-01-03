@@ -1093,6 +1093,78 @@ app.delete('/api/time-entries/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Get project assignments (which users can use which projects)
+app.get('/api/projects/:projectId/assignments', authenticateToken, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    
+    const [assignments] = await pool.query(
+      'SELECT user_id FROM project_assignments WHERE project_id = ?',
+      [projectId]
+    );
+    
+    res.json(assignments.map(a => a.user_id));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Set project assignments
+app.post('/api/projects/:projectId/assignments', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin only' });
+    }
+    
+    const { projectId } = req.params;
+    const { userIds } = req.body; // Array of user IDs
+    
+    // Delete existing assignments
+    await pool.query('DELETE FROM project_assignments WHERE project_id = ?', [projectId]);
+    
+    // Add new assignments
+    if (userIds && userIds.length > 0) {
+      const values = userIds.map(userId => [projectId, userId]);
+      await pool.query(
+        'INSERT INTO project_assignments (project_id, user_id) VALUES ?',
+        [values]
+      );
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get projects for current user (only projects they're assigned to, or all if admin)
+app.get('/api/projects/my/list', authenticateToken, async (req, res) => {
+  try {
+    let query;
+    let params = [];
+    
+    if (req.user.role === 'admin') {
+      // Admins see all projects
+      query = 'SELECT * FROM projects ORDER BY name';
+    } else {
+      // Users see only assigned projects
+      query = `
+        SELECT DISTINCT p.* 
+        FROM projects p
+        LEFT JOIN project_assignments pa ON p.id = pa.project_id
+        WHERE pa.user_id = ? OR pa.user_id IS NULL
+        ORDER BY p.name
+      `;
+      params = [req.user.id];
+    }
+    
+    const [projects] = await pool.query(query, params);
+    res.json(projects);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Start Server
 app.listen(PORT, () => {
   console.log(`✓ Server running on http://localhost:${PORT}`);
