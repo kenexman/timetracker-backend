@@ -356,8 +356,17 @@ app.post('/api/time-entries', authenticateToken, async (req, res) => {
 
 // Bulk import time entries (from desktop tracker)
 app.post('/api/time-entries/import', authenticateToken, async (req, res) => {
+  console.log('📥 Import request received');
+  console.log('User:', req.user);
+  console.log('Entries count:', req.body.entries?.length || 0);
+  
   try {
     const { entries } = req.body;
+    
+    if (!entries || !Array.isArray(entries)) {
+      console.log('❌ Invalid entries format');
+      return res.status(400).json({ error: 'Invalid entries format' });
+    }
     
     const connection = await pool.getConnection();
     await connection.beginTransaction();
@@ -376,19 +385,26 @@ app.post('/api/time-entries/import', authenticateToken, async (req, res) => {
           );
           imported++;
         } catch (err) {
+          console.log(`❌ Error importing entry ${i}:`, err.message);
           errors.push({ index: i, error: err.message });
         }
       }
       
       await connection.commit();
+      console.log(`✓ Imported ${imported} entries, ${errors.length} errors`);
+      if (errors.length > 0) {
+        console.log('First error:', errors[0]);
+      }
       res.json({ imported, errors });
     } catch (error) {
       await connection.rollback();
+      console.log('❌ Transaction error:', error.message);
       throw error;
     } finally {
       connection.release();
     }
   } catch (error) {
+    console.log('❌ Import failed:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
