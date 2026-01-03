@@ -12,7 +12,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' })); // Increase limit for bulk imports
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Database Connection Pool
 const pool = mysql.createPool({
