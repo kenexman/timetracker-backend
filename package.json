@@ -1,0 +1,25 @@
+{
+  "name": "project-tracker-backend-mysql",
+  "version": "1.0.0",
+  "description": "Project tracking backend API with MySQL and P&L tracking",
+  "main": "server-mysql.js",
+  "scripts": {
+    "start": "node server-mysql.js",
+    "dev": "nodemon server-mysql.js",
+    "init-db": "mysql -u root -p < ../database/mysql-schema.sql"
+  },
+  "keywords": ["project-management", "time-tracking", "invoicing", "pnl", "mysql"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "mysql2": "^3.6.5",
+    "jsonwebtoken": "^9.0.2",
+    "bcrypt": "^5.1.1",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
