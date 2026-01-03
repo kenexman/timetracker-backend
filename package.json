@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server-mysql.js",
     "dev": "nodemon server-mysql.js",
-    "init-db": "mysql -u root -p < ../database/mysql-schema.sql"
+    "init-db": "mysql -u root -p < ../database/server.sql"
   },
   "keywords": ["project-management", "time-tracking", "invoicing", "pnl", "mysql"],
   "author": "",
