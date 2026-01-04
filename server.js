@@ -105,7 +105,8 @@ app.post('/api/auth/login', async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        hourly_rate: parseFloat(user.hourly_rate || 0)
       }
     });
   } catch (error) {
