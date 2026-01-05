@@ -271,12 +271,41 @@ app.get('/api/projects/:id', authenticateToken, async (req, res) => {
 // Create project
 app.post('/api/projects', authenticateToken, async (req, res) => {
   try {
-    const { name, client_id, project_code, billing_type, hourly_rate, fixed_budget, status, color } = req.body;
+    const { 
+      name, 
+      description,
+      client_id, 
+      project_code, 
+      billing_type, 
+      hourly_rate, 
+      fixed_budget, 
+      estimated_hours,
+      status, 
+      start_date,
+      end_date,
+      color 
+    } = req.body;
     
     const [result] = await pool.query(
-      `INSERT INTO projects (name, client_id, project_code, billing_type, hourly_rate, fixed_budget, status, color)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, client_id, project_code, billing_type, hourly_rate, fixed_budget, status || 'active', color || '#4CAF50']
+      `INSERT INTO projects (
+        name, description, client_id, project_code, billing_type, 
+        hourly_rate, fixed_budget, estimated_hours, status, 
+        start_date, end_date, color
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        name, 
+        description || null,
+        client_id || null, 
+        project_code || null, 
+        billing_type || 'hourly', 
+        hourly_rate || null, 
+        fixed_budget || null, 
+        estimated_hours || null,
+        status || 'active', 
+        start_date || null,
+        end_date || null,
+        color || '#667eea'
+      ]
     );
     
     res.json({ id: result.insertId, message: 'Project created successfully' });
@@ -288,14 +317,38 @@ app.post('/api/projects', authenticateToken, async (req, res) => {
 // Update project
 app.patch('/api/projects/:id', authenticateToken, async (req, res) => {
   try {
-    const { name, status, hourly_rate, end_date } = req.body;
+    const { 
+      name, 
+      description,
+      color,
+      status, 
+      project_code,
+      billing_type,
+      hourly_rate, 
+      fixed_budget,
+      estimated_hours,
+      start_date,
+      end_date 
+    } = req.body;
+    
     const updates = [];
     const values = [];
     
-    if (name) { updates.push('name = ?'); values.push(name); }
-    if (status) { updates.push('status = ?'); values.push(status); }
+    if (name !== undefined) { updates.push('name = ?'); values.push(name); }
+    if (description !== undefined) { updates.push('description = ?'); values.push(description); }
+    if (color !== undefined) { updates.push('color = ?'); values.push(color); }
+    if (status !== undefined) { updates.push('status = ?'); values.push(status); }
+    if (project_code !== undefined) { updates.push('project_code = ?'); values.push(project_code); }
+    if (billing_type !== undefined) { updates.push('billing_type = ?'); values.push(billing_type); }
     if (hourly_rate !== undefined) { updates.push('hourly_rate = ?'); values.push(hourly_rate); }
-    if (end_date) { updates.push('end_date = ?'); values.push(end_date); }
+    if (fixed_budget !== undefined) { updates.push('fixed_budget = ?'); values.push(fixed_budget); }
+    if (estimated_hours !== undefined) { updates.push('estimated_hours = ?'); values.push(estimated_hours); }
+    if (start_date !== undefined) { updates.push('start_date = ?'); values.push(start_date); }
+    if (end_date !== undefined) { updates.push('end_date = ?'); values.push(end_date); }
+    
+    if (updates.length === 0) {
+      return res.json({ message: 'No fields to update' });
+    }
     
     values.push(req.params.id);
     
