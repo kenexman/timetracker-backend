@@ -963,6 +963,8 @@ app.get('/api/reports/overview', authenticateToken, async (req, res) => {
         p.name,
         p.color,
         p.status,
+        p.fixed_budget,
+        p.estimated_hours,
         COUNT(te.id) as total_entries,
         COALESCE(SUM(te.hours), 0) as total_hours,
         COUNT(DISTINCT te.user_id) as team_members,
@@ -971,7 +973,7 @@ app.get('/api/reports/overview', authenticateToken, async (req, res) => {
       LEFT JOIN time_entries te ON p.id = te.project_id
       LEFT JOIN users u ON te.user_id = u.id
       WHERE p.status = 'active'
-      GROUP BY p.id, p.name, p.color, p.status
+      GROUP BY p.id, p.name, p.color, p.status, p.fixed_budget, p.estimated_hours
       ORDER BY total_hours DESC
     `);
     
@@ -997,7 +999,9 @@ app.get('/api/reports/overview', authenticateToken, async (req, res) => {
       projectReport: projectReport.map(p => ({
         ...p,
         total_hours: parseFloat(p.total_hours),
-        total_cost: parseFloat(p.total_cost)
+        total_cost: parseFloat(p.total_cost),
+        fixed_budget: p.fixed_budget ? parseFloat(p.fixed_budget) : null,
+        estimated_hours: p.estimated_hours ? parseFloat(p.estimated_hours) : null
       })),
       userReport: userReport.map(u => ({
         ...u,
