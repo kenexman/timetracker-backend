@@ -401,7 +401,152 @@ app.get('/api/assignment-rules/project/:projectId', authenticateToken, async (re
     res.status(500).json({ error: 'Failed to fetch project rules' });
   }
 });
+// UPDATE: POST /api/time-entries - Accept rule_id
+// Find the existing POST /api/time-entries endpoint and update it:
 
+app.post('/api/time-entries', authenticateToken, async (req, res) => {
+  try {
+    const { 
+      user_id, 
+      project_id, 
+      rule_id,              // NEW: Track which rule assigned this
+      description, 
+      hours, 
+      entry_date, 
+      billable, 
+      source 
+    } = req.body;
+    
+    // Validate
+    if (!user_id || !hours || !entry_date) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Insert with rule_id
+    const [result] = await pool.query(`
+      INSERT INTO time_entries 
+      (user_id, project_id, rule_id, description, hours, entry_date, billable, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [user_id, project_id || null, rule_id || null, description, hours, entry_date, billable !== false, source || 'manual']);
+    
+    // Fetch the created entry with rule info
+    const [entries] = await pool.query(`
+      SELECT 
+        te.*,
+        u.name as user_name,
+        p.name as project_name,
+        p.color as project_color,
+        ar.match_type as rule_match_type,
+        ar.match_value as rule_match_value
+      FROM time_entries te
+      LEFT JOIN users u ON te.user_id = u.id
+      LEFT JOIN projects p ON te.project_id = p.id
+      LEFT JOIN assignment_rules ar ON te.rule_id = ar.id
+      WHERE te.id = ?
+    `, [result.insertId]);
+    
+    res.status(201).json(entries[0]);
+  } catch (error) {
+    console.error('Error creating time entry:', error);
+    res.status(500).json({ error: 'Failed to create time entry' });
+  }
+});
+
+// ============================================
+// UPDATE: GET /api/time-entries/user/:userId
+// Include rule information in response
+// ============================================
+
+app.get('/api/time-entries/user/:userId', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const [entries] = await pool.query(`
+      SELECT 
+        te.*,
+        p.name as project_name,
+        p.color as project_color,
+        u.name as user_name,
+        u.hourly_rate as user_hourly_rate,
+        ar.id as rule_id,
+        ar.match_type as rule_match_type,
+        ar.match_value as rule_match_value,
+        ar.priority as rule_priority
+      FROM time_entries te
+      LEFT JOIN projects p ON te.project_id = p.id
+      LEFT JOIN users u ON te.user_id = u.id
+      LEFT JOIN assignment_rules ar ON te.rule_id = ar.id
+      WHERE te.user_id = ?
+      ORDER BY te.entry_date DESC, te.id DESC
+    `, [userId]);
+    
+    // Add rule_info field for easy display
+    const entriesWithRuleInfo = entries.map(entry => ({
+      ...entry,
+      rule_info: entry.rule_id ? 
+        `${entry.rule_match_type}: "${entry.rule_match_value}" (priority: ${entry.rule_priority})` : 
+        null
+    }));
+    
+    res.json(entriesWithRuleInfo);
+  } catch (error) {
+    console.error('Error fetching time entries:', error);
+    res.status(500).json({ error: 'Failed to fetch time entries' });
+  }
+});
+
+// ============================================
+// NEW: GET /api/time-entries/unassigned
+// Get entries without project assignment (for bulk assign)
+// ============================================
+
+app.get('/api/time-entries/unassigned', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.role === 'admin' ? null : req.user.id;
+    
+    let query = `
+      SELECT 
+        te.*,
+        u.name as user_name,
+        u.hourly_rate as user_hourly_rate,
+        ar.id as rule_id,
+        ar.match_type as rule_match_type,
+        ar.match_value as rule_match_value,
+        ar.priority as rule_priority,
+        p2.name as suggested_project_name
+      FROM time_entries te
+      LEFT JOIN users u ON te.user_id = u.id
+      LEFT JOIN assignment_rules ar ON te.rule_id = ar.id
+      LEFT JOIN projects p2 ON ar.project_id = p2.id
+      WHERE te.project_id IS NULL
+    `;
+    
+    if (userId) {
+      query += ` AND te.user_id = ?`;
+    }
+    
+    query += ` ORDER BY te.entry_date DESC, te.id DESC`;
+    
+    const [entries] = await pool.query(query, userId ? [userId] : []);
+    
+    // Add helpful fields
+    const entriesWithInfo = entries.map(entry => ({
+      ...entry,
+      rule_info: entry.rule_id ? 
+        `Rule: ${entry.rule_match_type} "${entry.rule_match_value}"` : 
+        null,
+      suggested_project: entry.rule_id ? {
+        id: entry.suggested_project_id,
+        name: entry.suggested_project_name
+      } : null
+    }));
+    
+    res.json(entriesWithInfo);
+  } catch (error) {
+    console.error('Error fetching unassigned entries:', error);
+    res.status(500).json({ error: 'Failed to fetch unassigned entries' });
+  }
+});
 // Create new assignment rule
 app.post('/api/assignment-rules', authenticateToken, async (req, res) => {
   try {
