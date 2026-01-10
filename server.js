@@ -362,7 +362,194 @@ app.patch('/api/projects/:id', authenticateToken, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+// ============================================
+// ASSIGNMENT RULES ENDPOINTS
+// Add these to server.js
+// ============================================
 
+// Get all assignment rules
+app.get('/api/assignment-rules', authenticateToken, async (req, res) => {
+  try {
+    const [rules] = await pool.query(`
+      SELECT r.*, p.name as project_name, p.color as project_color
+      FROM assignment_rules r
+      LEFT JOIN projects p ON r.project_id = p.id
+      ORDER BY r.priority DESC, r.id DESC
+    `);
+    
+    res.json(rules);
+  } catch (error) {
+    console.error('Error fetching assignment rules:', error);
+    res.status(500).json({ error: 'Failed to fetch assignment rules' });
+  }
+});
+
+// Get rules for a specific project
+app.get('/api/assignment-rules/project/:projectId', authenticateToken, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    
+    const [rules] = await pool.query(`
+      SELECT * FROM assignment_rules
+      WHERE project_id = ?
+      ORDER BY priority DESC
+    `, [projectId]);
+    
+    res.json(rules);
+  } catch (error) {
+    console.error('Error fetching project rules:', error);
+    res.status(500).json({ error: 'Failed to fetch project rules' });
+  }
+});
+
+// Create new assignment rule
+app.post('/api/assignment-rules', authenticateToken, async (req, res) => {
+  try {
+    const { project_id, match_type, match_value, priority, is_active } = req.body;
+    
+    // Validate match_type
+    const validMatchTypes = ['app_name', 'window_title', 'url_contains', 'url_domain'];
+    if (!validMatchTypes.includes(match_type)) {
+      return res.status(400).json({ error: 'Invalid match_type' });
+    }
+    
+    // Validate required fields
+    if (!project_id || !match_type || !match_value) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    const [result] = await pool.query(`
+      INSERT INTO assignment_rules (project_id, match_type, match_value, priority, is_active)
+      VALUES (?, ?, ?, ?, ?)
+    `, [project_id, match_type, match_value, priority || 0, is_active !== false]);
+    
+    // Fetch the created rule
+    const [rules] = await pool.query(`
+      SELECT r.*, p.name as project_name, p.color as project_color
+      FROM assignment_rules r
+      LEFT JOIN projects p ON r.project_id = p.id
+      WHERE r.id = ?
+    `, [result.insertId]);
+    
+    res.status(201).json(rules[0]);
+  } catch (error) {
+    console.error('Error creating assignment rule:', error);
+    res.status(500).json({ error: 'Failed to create assignment rule' });
+  }
+});
+
+// Update assignment rule
+app.patch('/api/assignment-rules/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { project_id, match_type, match_value, priority, is_active } = req.body;
+    
+    // Build update query dynamically
+    const updates = [];
+    const values = [];
+    
+    if (project_id !== undefined) {
+      updates.push('project_id = ?');
+      values.push(project_id);
+    }
+    if (match_type !== undefined) {
+      const validMatchTypes = ['app_name', 'window_title', 'url_contains', 'url_domain'];
+      if (!validMatchTypes.includes(match_type)) {
+        return res.status(400).json({ error: 'Invalid match_type' });
+      }
+      updates.push('match_type = ?');
+      values.push(match_type);
+    }
+    if (match_value !== undefined) {
+      updates.push('match_value = ?');
+      values.push(match_value);
+    }
+    if (priority !== undefined) {
+      updates.push('priority = ?');
+      values.push(priority);
+    }
+    if (is_active !== undefined) {
+      updates.push('is_active = ?');
+      values.push(is_active);
+    }
+    
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+    
+    values.push(id);
+    
+    await pool.query(`
+      UPDATE assignment_rules 
+      SET ${updates.join(', ')}
+      WHERE id = ?
+    `, values);
+    
+    // Fetch updated rule
+    const [rules] = await pool.query(`
+      SELECT r.*, p.name as project_name, p.color as project_color
+      FROM assignment_rules r
+      LEFT JOIN projects p ON r.project_id = p.id
+      WHERE r.id = ?
+    `, [id]);
+    
+    if (rules.length === 0) {
+      return res.status(404).json({ error: 'Rule not found' });
+    }
+    
+    res.json(rules[0]);
+  } catch (error) {
+    console.error('Error updating assignment rule:', error);
+    res.status(500).json({ error: 'Failed to update assignment rule' });
+  }
+});
+
+// Delete assignment rule
+app.delete('/api/assignment-rules/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const [result] = await pool.query('DELETE FROM assignment_rules WHERE id = ?', [id]);
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Rule not found' });
+    }
+    
+    res.json({ message: 'Rule deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting assignment rule:', error);
+    res.status(500).json({ error: 'Failed to delete assignment rule' });
+  }
+});
+
+// Toggle rule active status
+app.patch('/api/assignment-rules/:id/toggle', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    await pool.query(`
+      UPDATE assignment_rules 
+      SET is_active = NOT is_active
+      WHERE id = ?
+    `, [id]);
+    
+    const [rules] = await pool.query(`
+      SELECT r.*, p.name as project_name, p.color as project_color
+      FROM assignment_rules r
+      LEFT JOIN projects p ON r.project_id = p.id
+      WHERE r.id = ?
+    `, [id]);
+    
+    if (rules.length === 0) {
+      return res.status(404).json({ error: 'Rule not found' });
+    }
+    
+    res.json(rules[0]);
+  } catch (error) {
+    console.error('Error toggling rule:', error);
+    res.status(500).json({ error: 'Failed to toggle rule' });
+  }
+});
 // ==================== TIME ENTRY ENDPOINTS ====================
 
 // Get time entries
