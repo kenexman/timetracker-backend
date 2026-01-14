@@ -152,12 +152,18 @@ app.get('/api/stats', authenticateToken, async (req, res) => {
 
 /*
 Find this pattern in your server.js:
+// ← Add CORS configuration HERE (before other middleware)
+app.use(cors({
+  origin: [
+    'https://coefficient.fun',
+    'https://www.coefficient.fun'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
-const express = require('express');
-const app = express();
-...
-app.use(express.json());
-...
+app.use(express.json());  // ← This should come AFTER cors()
 
 // Routes
 app.get('/api/projects', authenticateToken, async (req, res) => {
