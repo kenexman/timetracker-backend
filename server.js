@@ -33,7 +33,7 @@ app.use(express.json());
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'srv743.hstgr.io',
   user: process.env.DB_USER || 'u242064145_tracker_user',
-  password: process.env.DB_PASSWORD,  // ← NEVER hardcode! Use environment variable
+  password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME || 'u242064145_project_tracke',
   port: process.env.DB_PORT || 3306,
   waitForConnections: true,
@@ -102,7 +102,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const [users] = await pool.query(
-      'SELECT * FROM users WHERE email = ?',
+      'SELECT id, name, email, password_hash, hourly_rate, role FROM users WHERE email = ?',
       [email]
     );
 
@@ -113,20 +113,14 @@ app.post('/api/auth/login', async (req, res) => {
 
     const user = users[0];
     
-    // Check if password exists
-    if (!user.password) {
+    // Check if password_hash exists
+    if (!user.password_hash) {
       console.error('User has no password hash:', email);
       return res.status(500).json({ error: 'Account configuration error' });
     }
 
-    // Validate password hash format
-    if (!user.password.startsWith('$2') || user.password.length < 50) {
-      console.error('Invalid password hash format:', email);
-      return res.status(500).json({ error: 'Account configuration error' });
-    }
-
-    console.log('Comparing password...');
-    const validPassword = await bcrypt.compare(password, user.password);
+    console.log('Password hash exists, comparing...');
+    const validPassword = await bcrypt.compare(password, user.password_hash);
 
     if (!validPassword) {
       console.log('Invalid password for:', email);
@@ -164,7 +158,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Register (optional - only if you want user registration)
+// Register
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, email, password, hourly_rate } = req.body;
@@ -186,7 +180,7 @@ app.post('/api/auth/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const [result] = await pool.query(
-      'INSERT INTO users (name, email, password, hourly_rate, role) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO users (name, email, password_hash, hourly_rate, role) VALUES (?, ?, ?, ?, ?)',
       [name, email, hashedPassword, hourly_rate || 0, 'user']
     );
 
@@ -216,7 +210,7 @@ app.post('/api/auth/register', async (req, res) => {
 // USER ROUTES
 // ============================================
 
-// Get all users (admin only)
+// Get all users
 app.get('/api/users', authenticateToken, async (req, res) => {
   try {
     const [users] = await pool.query(
@@ -253,7 +247,6 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
   try {
     const { name, email, hourly_rate, role } = req.body;
     
-    // Only admin or self can update
     if (req.user.role !== 'admin' && req.user.id !== parseInt(req.params.id)) {
       return res.status(403).json({ error: 'Not authorized' });
     }
@@ -274,7 +267,7 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Delete user (admin only)
+// Delete user
 app.delete('/api/users/:id', authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
@@ -330,7 +323,7 @@ app.get('/api/projects/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Create project (admin only)
+// Create project
 app.post('/api/projects', authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
@@ -362,7 +355,7 @@ app.post('/api/projects', authenticateToken, async (req, res) => {
   }
 });
 
-// Update project (admin only)
+// Update project
 app.put('/api/projects/:id', authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
@@ -387,7 +380,7 @@ app.put('/api/projects/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Delete project (admin only)
+// Delete project
 app.delete('/api/projects/:id', authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
@@ -414,7 +407,6 @@ app.delete('/api/projects/:id', authenticateToken, async (req, res) => {
 // Get time entries for a user
 app.get('/api/time-entries/user/:userId', authenticateToken, async (req, res) => {
   try {
-    // Users can only see their own entries unless they're admin
     if (req.user.role !== 'admin' && req.user.id !== parseInt(req.params.userId)) {
       return res.status(403).json({ error: 'Not authorized' });
     }
@@ -481,7 +473,6 @@ app.post('/api/time-entries', authenticateToken, async (req, res) => {
   try {
     const { user_id, project_id, rule_id, description, hours, entry_date, billable, source } = req.body;
 
-    // Users can only create entries for themselves unless they're admin
     if (req.user.role !== 'admin' && req.user.id !== user_id) {
       return res.status(403).json({ error: 'Not authorized' });
     }
@@ -519,7 +510,6 @@ app.put('/api/time-entries/:id', authenticateToken, async (req, res) => {
   try {
     const { project_id, description, hours, entry_date, billable } = req.body;
 
-    // Check ownership
     const [entries] = await pool.query('SELECT user_id FROM time_entries WHERE id = ?', [req.params.id]);
     
     if (entries.length === 0) {
@@ -542,7 +532,7 @@ app.put('/api/time-entries/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Bulk update time entries (assign project)
+// Bulk update time entries
 app.patch('/api/time-entries/bulk-assign', authenticateToken, async (req, res) => {
   try {
     const { entry_ids, project_id } = req.body;
@@ -555,7 +545,6 @@ app.patch('/api/time-entries/bulk-assign', authenticateToken, async (req, res) =
       return res.status(400).json({ error: 'project_id is required' });
     }
 
-    // Check ownership for non-admin users
     if (req.user.role !== 'admin') {
       const placeholders = entry_ids.map(() => '?').join(',');
       const [entries] = await pool.query(
@@ -587,7 +576,6 @@ app.patch('/api/time-entries/bulk-assign', authenticateToken, async (req, res) =
 // Delete time entry
 app.delete('/api/time-entries/:id', authenticateToken, async (req, res) => {
   try {
-    // Check ownership
     const [entries] = await pool.query('SELECT user_id FROM time_entries WHERE id = ?', [req.params.id]);
     
     if (entries.length === 0) {
@@ -629,7 +617,7 @@ app.get('/api/assignment-rules', authenticateToken, async (req, res) => {
   }
 });
 
-// Create assignment rule (admin only)
+// Create assignment rule
 app.post('/api/assignment-rules', authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
@@ -661,7 +649,7 @@ app.post('/api/assignment-rules', authenticateToken, async (req, res) => {
   }
 });
 
-// Update assignment rule (admin only)
+// Update assignment rule
 app.put('/api/assignment-rules/:id', authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
@@ -686,7 +674,7 @@ app.put('/api/assignment-rules/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Toggle assignment rule active status (admin only)
+// Toggle assignment rule
 app.patch('/api/assignment-rules/:id/toggle', authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
@@ -709,7 +697,7 @@ app.patch('/api/assignment-rules/:id/toggle', authenticateToken, async (req, res
   }
 });
 
-// Delete assignment rule (admin only)
+// Delete assignment rule
 app.delete('/api/assignment-rules/:id', authenticateToken, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
