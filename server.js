@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ============================================
+// ============================================ 
 // CORS Configuration - MUST BE FIRST!
 // ============================================ 
 app.use(cors({
