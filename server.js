@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 3000;
 
 // ============================================
 // CORS Configuration - MUST BE FIRST!
-// ============================================
+// ============================================ 
 app.use(cors({
   origin: [
     'https://coefficient.fun',
@@ -31,9 +31,9 @@ app.use(express.json());
 // Database Connection Pool
 // ============================================
 const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'srv1670.hstgr.io',
-  user: process.env.DB_USER || 'u242064145_project_tracke',
-  password: process.env.DB_PASSWORD,
+  host: process.env.DB_HOST || 'srv743.hstgr.io',
+  user: process.env.DB_USER || 'u242064145_tracker_user',
+  password: process.env.DB_PASSWORD  || 'x58UB1$tAIh0qxHl',
   database: process.env.DB_NAME || 'u242064145_project_tracke',
   waitForConnections: true,
   connectionLimit: 10,
