@@ -33,8 +33,9 @@ app.use(express.json());
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'srv743.hstgr.io',
   user: process.env.DB_USER || 'u242064145_tracker_user',
-  password: process.env.DB_PASSWORD  || 'x58UB1$tAIh0qxHl',
+  password: process.env.DB_PASSWORD,  // ← NEVER hardcode! Use environment variable
   database: process.env.DB_NAME || 'u242064145_project_tracke',
+  port: process.env.DB_PORT || 3306,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
@@ -94,6 +95,8 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    console.log('Login attempt for:', email);
+
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
@@ -104,15 +107,33 @@ app.post('/api/auth/login', async (req, res) => {
     );
 
     if (users.length === 0) {
+      console.log('User not found:', email);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const user = users[0];
+    
+    // Check if password exists
+    if (!user.password) {
+      console.error('User has no password hash:', email);
+      return res.status(500).json({ error: 'Account configuration error' });
+    }
+
+    // Validate password hash format
+    if (!user.password.startsWith('$2') || user.password.length < 50) {
+      console.error('Invalid password hash format:', email);
+      return res.status(500).json({ error: 'Account configuration error' });
+    }
+
+    console.log('Comparing password...');
     const validPassword = await bcrypt.compare(password, user.password);
 
     if (!validPassword) {
+      console.log('Invalid password for:', email);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+
+    console.log('✅ Login successful for:', email);
 
     const token = jwt.sign(
       { 
@@ -120,7 +141,7 @@ app.post('/api/auth/login', async (req, res) => {
         email: user.email, 
         role: user.role 
       },
-      process.env.JWT_SECRET || 'your-secret-key-change-this',
+      process.env.JWT_SECRET || 'railway-timetracker-secret-2026-xyz',
       { expiresIn: '7d' }
     );
 
@@ -136,7 +157,10 @@ app.post('/api/auth/login', async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ 
+      error: 'Login failed',
+      details: error.message 
+    });
   }
 });
 
@@ -168,7 +192,7 @@ app.post('/api/auth/register', async (req, res) => {
 
     const token = jwt.sign(
       { id: result.insertId, email, role: 'user' },
-      process.env.JWT_SECRET || 'your-secret-key-change-this',
+      process.env.JWT_SECRET || 'railway-timetracker-secret-2026-xyz',
       { expiresIn: '7d' }
     );
 
