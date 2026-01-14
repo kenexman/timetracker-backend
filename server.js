@@ -61,7 +61,7 @@ function authenticateToken(req, res, next) {
     return res.status(401).json({ error: 'No token provided' });
   }
 
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-this', (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET || 'railway-timetracker-secret-2026-xyz', (err, user) => {
     if (err) {
       return res.status(403).json({ error: 'Invalid or expired token' });
     }
