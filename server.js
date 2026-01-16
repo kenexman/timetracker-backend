@@ -326,32 +326,90 @@ app.get('/api/projects/:id', authenticateToken, async (req, res) => {
 // Create project
 app.post('/api/projects', authenticateToken, async (req, res) => {
   try {
+    // Log incoming request
+    console.log('📝 Creating project:', req.body);
+    console.log('👤 User:', req.user);
+
+    // Check admin access
     if (req.user.role !== 'admin') {
+      console.log('❌ Not admin:', req.user.email);
       return res.status(403).json({ error: 'Admin access required' });
     }
 
     const { name, description, color, hourly_budget, status } = req.body;
 
-    if (!name) {
+    // Validate required fields
+    if (!name || name.trim() === '') {
+      console.log('❌ Missing project name');
       return res.status(400).json({ error: 'Project name is required' });
     }
 
+    // Sanitize and validate inputs
+    const projectName = name.trim();
+    const projectDesc = description ? description.trim() : null;
+    const projectColor = color || '#667eea';
+    const projectBudget = hourly_budget ? parseFloat(hourly_budget) : null;
+    const projectStatus = status || 'active';
+
+    // Validate color format
+    if (!/^#[0-9A-Fa-f]{6}$/.test(projectColor)) {
+      console.log('❌ Invalid color format:', projectColor);
+      return res.status(400).json({ error: 'Invalid color format' });
+    }
+
+    // Validate budget if provided
+    if (projectBudget !== null && (isNaN(projectBudget) || projectBudget < 0)) {
+      console.log('❌ Invalid budget:', hourly_budget);
+      return res.status(400).json({ error: 'Invalid hourly budget' });
+    }
+
+    // Validate status
+    if (!['active', 'archived'].includes(projectStatus)) {
+      console.log('❌ Invalid status:', projectStatus);
+      return res.status(400).json({ error: 'Status must be active or archived' });
+    }
+
+    console.log('✅ Validated data:', {
+      name: projectName,
+      description: projectDesc,
+      color: projectColor,
+      hourly_budget: projectBudget,
+      status: projectStatus
+    });
+
+    // Insert project
     const [result] = await pool.query(
       'INSERT INTO projects (name, description, color, hourly_budget, status) VALUES (?, ?, ?, ?, ?)',
-      [name, description || null, color || '#667eea', hourly_budget || null, status || 'active']
+      [projectName, projectDesc, projectColor, projectBudget, projectStatus]
     );
 
-    res.status(201).json({
+    console.log('✅ Project created, ID:', result.insertId);
+
+    // Return created project
+    const newProject = {
       id: result.insertId,
-      name,
-      description,
-      color,
-      hourly_budget,
-      status: status || 'active'
-    });
+      name: projectName,
+      description: projectDesc,
+      color: projectColor,
+      hourly_budget: projectBudget,
+      status: projectStatus,
+      created_at: new Date().toISOString()
+    };
+
+    res.status(201).json(newProject);
+
   } catch (error) {
-    console.error('Error creating project:', error);
-    res.status(500).json({ error: 'Failed to create project' });
+    console.error('❌ Error creating project:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      sqlMessage: error.sqlMessage
+    });
+    
+    res.status(500).json({ 
+      error: 'Failed to create project',
+      details: error.message
+    });
   }
 });
 
