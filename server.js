@@ -1,5 +1,10 @@
 // BACKEND FIX - Replace the CREATE PROJECT endpoint in server.js
-
+app.use(cors({
+  origin: '*',  // Allow all origins temporarily to test
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 // Create project (admin only)
 app.post('/api/projects', authenticateToken, async (req, res) => {
   try {
