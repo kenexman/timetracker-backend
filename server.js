@@ -731,7 +731,30 @@ app.put('/api/assignment-rules/:id', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to update assignment rule' });
   }
 });
+// Update assignment rule (PATCH support for frontend compatibility)
+app.patch('/api/assignment-rules/:id', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
 
+    const { project_id, match_type, match_value, priority, is_active } = req.body;
+
+    const [result] = await pool.query(
+      'UPDATE assignment_rules SET project_id = ?, match_type = ?, match_value = ?, priority = ?, is_active = ? WHERE id = ?',
+      [project_id, match_type, match_value, priority, is_active !== false, req.params.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Assignment rule not found' });
+    }
+
+    res.json({ message: 'Assignment rule updated successfully' });
+  } catch (error) {
+    console.error('Error updating assignment rule:', error);
+    res.status(500).json({ error: 'Failed to update assignment rule' });
+  }
+});
 // Toggle assignment rule
 app.patch('/api/assignment-rules/:id/toggle', authenticateToken, async (req, res) => {
   try {
